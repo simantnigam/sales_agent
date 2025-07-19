@@ -1,0 +1,51 @@
+# Core
+pandas
+numpy
+faker
+
+# Database
+# sqlite3 is built-in
+
+# Visualization
+matplotlib
+seaborn
+plotly
+
+# ML & Tabular
+scikit-learn
+xgboost
+lightgbm
+catboost
+
+# Agentic AI
+openai
+langchain
+langgraph
+langchainhub
+sentence-transformers
+
+# Vectorstore (check system support for Python 3.12)
+faiss-cpu
+
+# Geospatial + Clustering
+geopy
+haversine
+networkx
+
+# Optimization & Constrained Clustering (3.12 compatible)
+cvxpy
+pulp
+
+# Backend (optional)
+fastapi
+uvicorn
+
+# Utils
+tqdm
+python-dotenv
+
+#maps
+folium
+
+
+ipykernel
