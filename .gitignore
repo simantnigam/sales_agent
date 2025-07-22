@@ -1,1 +1,4 @@
 salesagent/
+__pycache__/
+__init__.py
+test.ipynb
