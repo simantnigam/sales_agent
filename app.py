@@ -151,7 +151,7 @@ with tab2:
 
 
     # Download PNG
-    if st.button("📤 Export Graph PNG"):
+    if st.button("Export Graph PNG"):
         png_bytes = executable_graph.get_graph().draw_mermaid_png()
         b64 = base64.b64encode(png_bytes).decode()
         href = f'<a href="data:image/png;base64,{b64}" download="sales_graph.png">Download PNG</a>'
