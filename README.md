@@ -16,6 +16,12 @@ A multi-agent, graph-driven assistant designed for field sales representatives i
 
 ---
 
+## 🧱 Agent Flow Diagram
+
+![Architecture](sales_agent_graph.png)
+
+---
+
 ## 📦 Setup Instructions
 * Clone the repo
 ```
