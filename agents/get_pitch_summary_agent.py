@@ -1,8 +1,8 @@
 import os
 from dotenv import load_dotenv
-from typing import Dict,Any
+from typing import List,Dict,Any
 from langchain_openai import ChatOpenAI
-from langchain_core.runnables import RunnableLambda, RunnableMap
+from langchain_core.runnables import RunnableLambda
 
 load_dotenv(override=True)
 

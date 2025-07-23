@@ -49,7 +49,7 @@ def fetch_assigned_beats(inputs: Dict[str,Union[str, int]], db_path: str = "sale
         return [{"message": f"No beats found for {sales_rep_id} on {weekday}."}]
     
     # Convert DataFrame to a list of dictionaries
-    beats_list = beats_df.to_dict(orient='records')
+    beats_list = beats_df.to_dict(orient='records')[0]
 
     return beats_list
 

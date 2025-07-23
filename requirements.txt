@@ -48,5 +48,5 @@ python-dotenv
 #maps
 folium
 
-
+streamlit
 ipykernel

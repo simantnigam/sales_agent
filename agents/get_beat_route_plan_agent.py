@@ -4,7 +4,7 @@ from typing import Dict, Union, List
 from langchain_core.runnables import RunnableLambda
 
 
-def fetch_beat_route_plan(inputs: Dict[str, Union[str, int]], db_path: str = "sales_agent_co_pilot.db") -> List[Dict]:
+def fetch_beat_route_plan(inputs: Dict[str, Union[str, int]], db_path: str = "sales_agent_co_pilot.db") -> List[dict]:
     """
     Fetches the beat route plan for a specific beat ID.
 
@@ -40,8 +40,11 @@ def fetch_beat_route_plan(inputs: Dict[str, Union[str, int]], db_path: str = "sa
     
     # Convert DataFrame to a list of dictionaries
     route_plan_list = route_plan_df.to_dict(orient='records')
+    route_plan_dict = {
+        "Beat_Route_Plan" : route_plan_list
+    }
 
-    return route_plan_list
+    return route_plan_dict
 
 
 # Create a runnable function to fetch beat route plan

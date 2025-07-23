@@ -16,7 +16,7 @@ def fetch_retailer_info(inputs: Dict[str, Union[str, int]], db_path: str = "sale
         A dictionary containing the retailer's information.
     """
 
-    retailer_id = inputs.get("Retailer_ID")
+    retailer_id = inputs.get("Store_Info").get("Retailer_ID")
 
     conn = sqlite3.connect(db_path)
 
