@@ -138,3 +138,21 @@ with tab1:
 
             st.session_state.messages.append({"role": "assistant","content": response})
             st.rerun()
+
+
+# Agentic Flow Tab
+with tab2:
+    st.title("Agentic Flow")
+
+    # Mermaid render
+    png_bytes = executable_graph.get_graph().draw_mermaid_png()
+    image = Image.open(BytesIO(png_bytes))
+    st.image(image, caption="Agentic Flow Diagram")
+
+
+    # Download PNG
+    if st.button("📤 Export Graph PNG"):
+        png_bytes = executable_graph.get_graph().draw_mermaid_png()
+        b64 = base64.b64encode(png_bytes).decode()
+        href = f'<a href="data:image/png;base64,{b64}" download="sales_graph.png">Download PNG</a>'
+        st.markdown(href, unsafe_allow_html=True)
