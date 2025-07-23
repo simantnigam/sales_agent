@@ -16,6 +16,23 @@ A multi-agent, graph-driven assistant designed for field sales representatives i
 
 ---
 
+## 🧩 Project Structure
+
+```
+sales-agent/
+│
+├── agents/
+├── utils/                    
+├── agent_orchastrator/
+├── app.py
+├── database.db
+├── requirements.txt
+└── README.md
+
+```
+
+---
+
 ## 🧱 Agent Flow Diagram
 
 ![Architecture](sales_agent_graph.png)
