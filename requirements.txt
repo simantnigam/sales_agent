@@ -20,6 +20,7 @@ catboost
 # Agentic AI
 openai
 langchain
+langchain_openai
 langgraph
 langchainhub
 sentence-transformers
