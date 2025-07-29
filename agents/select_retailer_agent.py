@@ -37,7 +37,7 @@ def select_retailer_node(state: SalesRepState) -> SalesRepState:
         raise ValueError("Invalid Beat_Route_Plan format. Expected a list of retailers.")
 
     # Construct retailer names list
-    route_names = [f"{r['Retailer_ID']} - {r['Name']}" for r in route]
+    route_names = [f"{r['Retailer_ID']} - {r['Name']} - Sequence :{r['Visit_Sequence']}" for r in route]
     
     # Run LLM chain
     selected_name = select_chain.invoke({
