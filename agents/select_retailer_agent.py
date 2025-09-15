@@ -34,7 +34,10 @@ def select_retailer_node(state: SalesRepState) -> SalesRepState:
     if isinstance(route, dict) and "Beat_Route_Plan" in route:
         route = route["Beat_Route_Plan"]
     elif not isinstance(route, list):
-        raise ValueError("Invalid Beat_Route_Plan format. Expected a list of retailers.")
+        # raise ValueError("Invalid Beat_Route_Plan format. Expected a list of retailers.")
+        state["user_message"] = "Invalid Beat_Route_Plan format."
+        state["next_node"] = "get_route"
+        return state
 
     # Construct retailer names list
     route_names = [f"{r['Retailer_ID']} - {r['Name']} - Sequence :{r['Visit_Sequence']}" for r in route]
@@ -47,20 +50,29 @@ def select_retailer_node(state: SalesRepState) -> SalesRepState:
 
     # Fuzzy match with original route
     match = []
-    attempts = 5
+    attempts = 10
     while attempts > 0 and not match:
         match = difflib.get_close_matches(selected_name.strip(), route_names, n=1, cutoff=0.4)
         attempts -= 1
 
     if not match:
-        raise ValueError("No matching store found. Please rephrase.")
+        # raise ValueError("No matching store found. Please rephrase.")
+        state["Retailer_ID"] = None
+        state["Store_Info"] = None
+        state["user_message"] = f"No matching store found for '{user_message}'. Showing route again."
+        state["next_node"] = "get_route"
+        return state
 
     matched_id = match[0].split(" - ")[0]
 
-    selected_store = next((r for r in route if r["Retailer_ID"] == matched_id), None)
-    return {
-        "Store_Info": selected_store
-    }
+    # selected_store = next((r for r in route if r["Retailer_ID"] == matched_id), None)
+    selected_store = next((r for r in route if str(r["Retailer_ID"]) == matched_id), None)
+
+    state["Retailer_ID"] = matched_id
+    state["Store_Info"] = selected_store
+    state["next_node"] = "get_retailer_info"
+    
+    return state
 
 
 
