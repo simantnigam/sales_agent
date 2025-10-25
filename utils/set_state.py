@@ -9,6 +9,7 @@ class SalesRepState(TypedDict, total=False):
     Beat_ID: str
     Beat_Route_Plan: List[dict]
     Retailer_ID: str
+    visit_id: str
     Product_Recommendations: List[dict]
     Last_Visit_Stock: List[dict]
     Retailer_Info: dict
@@ -22,3 +23,4 @@ class SalesRepState(TypedDict, total=False):
     Day_Summary: str
     next_node: str
     conversation_end: bool
+    selection_failed : bool

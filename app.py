@@ -1,56 +1,74 @@
+# app.py
+import uuid
+import base64
+import sqlite3
+from io import BytesIO
+from PIL import Image
+
 import streamlit as st
 from langgraph.checkpoint.memory import MemorySaver
+
 from agent_orchastrator.sales_assist_orchastrator import build_agent_graph
 from utils.get_sales_reps import get_active_agents
 from utils.get_day import get_current_day
-import base64
-from io import BytesIO
-import uuid
-from PIL import Image
-import sqlite3
-from agents.order_logging_agent import OrderLoggingAgent
 
-db_path = "sales_agent_co_pilot.db"
 
-# Helper: fetch product price
+DB_PATH = "sales_agent_co_pilot.db"
+
+# ---------- Helpers ----------
 def get_product_price(product_id: str) -> float:
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT Price FROM products WHERE Product_ID = ?", (product_id,))
-    row = cursor.fetchone()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT Price FROM products WHERE Product_ID = ?", (product_id,))
+    row = cur.fetchone()
     conn.close()
-    return row[0] if row else 0.0
+    return float(row[0]) if row else 0.0
 
-# Memory & Graph Setup
-# thread_id = str(uuid.uuid4())
+def ensure_list(val):
+    return val if isinstance(val, list) else []
+
+def normalize_route(route_like):
+    if isinstance(route_like, dict) and "Beat_Route_Plan" in route_like:
+        return route_like.get("Beat_Route_Plan") or []
+    return route_like or []
+
+
+# ---------- Streamlit App State ----------
+st.set_page_config(page_title="Sales Assistant", layout="wide")
+
 if "thread_id" not in st.session_state:
     st.session_state.thread_id = str(uuid.uuid4())
-builder = build_agent_graph()
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "cart" not in st.session_state:
+    st.session_state.cart = []   # [{Product_ID, Product_Name, Quantity, Price}]
+
+if "graph_state" not in st.session_state:
+    st.session_state.graph_state = {}
+
+if "show_cart_ui" not in st.session_state:
+    st.session_state.show_cart_ui = False
+
+# ---------- Graph Setup ----------
 memory = MemorySaver()
-
-executable_graph = builder.compile(
-    checkpointer=memory
-)
-
+builder = build_agent_graph()
+executable_graph = builder.compile(checkpointer=memory)
 config = {"configurable": {"thread_id": st.session_state.thread_id}}
 
-
-# UI Setup
-st.set_page_config(page_title="Sales Assistant", layout="wide")
+# ---------- UI Tabs ----------
 tab1, tab2 = st.tabs(["Sales Rep Assistant", "Agentic Flow"])
 
-# if "thread_id" not in st.session_state:
-#     st.session_state.thread_id = thread_id
 
-
-# Chat bot tab
-
+# =====================================
+# TAB 1 — CHAT / SALES REP WORKFLOW UI
+# =====================================
 with tab1:
     st.title("AI Sales Rep Assistant")
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
+    # First-time greeting
+    if not st.session_state.messages:
         weekday = get_current_day()
         sales_reps = get_active_agents()
         st.session_state.weekday = weekday
@@ -58,51 +76,44 @@ with tab1:
 
         st.session_state.messages.append({
             "role": "assistant",
-            "content": f"Hello! Today is **{weekday}**. Please select your Sales Rep to begin:"
+            "content": f"Hello! Today is **{weekday}**. Please select your Sales Rep to begin."
         })
 
-    # Display chat messages
+    # Display chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Sales rep dropdown
+    # ---------- Select Sales Rep ----------
     if "sales_rep_id" not in st.session_state:
         selected_rep = st.selectbox("Select Sales Rep", st.session_state.sales_reps)
         if st.button("Confirm"):
             st.session_state.sales_rep_id = selected_rep
-
-
-            # Initial state
-            init_state = {
+            
+            state = {
                 "sales_rep_id": selected_rep,
-                "Weekday": st.session_state.weekday
+                "Weekday": st.session_state.weekday,
+                "user_message": ""
             }
 
-
-            #initial graph run
-            result = executable_graph.invoke(init_state,config=config)
+            result = executable_graph.invoke(state, config=config)
             st.session_state.graph_state = result
 
-            # Append beat info
-            beat_id = result.get("Beat_ID")
+            beat_id = result.get("Beat_ID", "N/A")
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": f"Assigned Beat ID for {selected_rep}: **{beat_id}**"
+                "content": f"✅ Assigned Beat: **{beat_id}**\n\nType **plan** to view route or **visit <store>** to begin."
             })
             st.rerun()
 
-
+    # ---------- Process User Input ----------
     else:
-        # Chat Input
-        user_input = st.chat_input("Ask your assistant...")
-
+        user_input = st.chat_input("Ask your assistant…")
 
         if user_input:
             st.session_state.messages.append({"role": "user", "content": user_input})
 
-            # Parse based on simple heuristics
-            prev_state = st.session_state.get("graph_state", {})
+            prev_state = st.session_state.graph_state
             new_state = {
                 **prev_state,
                 "sales_rep_id": st.session_state.sales_rep_id,
@@ -110,112 +121,133 @@ with tab1:
                 "user_message": user_input
             }
 
+            if "visit" not in user_input.lower():
+                st.session_state.show_cart_ui = False
+
             result = executable_graph.invoke(new_state, config=config)
             st.session_state.graph_state = result
 
-            response = ""
-
-            # ---- Handle different queries ----
+            # ----- Day Summary -----
             if "day summary" in user_input.lower():
-                response = f"## End of Day Summary\n\n{result.get('Day_Summary', 'No summary available')}"
+                summary = result.get("Day_Summary", "No summary available.")
+                st.session_state.messages.append({"role": "assistant", "content": summary})
+                st.rerun()
 
-            elif "plan" in user_input.lower():
-                # route = graph_state.get("Beat_Route_Plan", [])
-                route = result.get("Beat_Route_Plan", [])
-                if route:
-                    route_str = "\n".join([f"{r['Visit_Sequence']}. {r['Name']}" for r in route])
-                    response = f"Route Plan for today :\n{route_str}"
-                else:
-                    response = "Route plan not found."
+            # ----- Show Route -----
+            if "plan" in user_input.lower():
+                route = normalize_route(result.get("Beat_Route_Plan"))
+                plan = "\n".join([f"{r['Visit_Sequence']}. {r['Name']} (ID: {r['Retailer_ID']})" for r in route])
+                st.session_state.messages.append({"role": "assistant", "content": f"### 📍 Route Plan\n{plan}"})
+                st.rerun()
 
-            elif "visit" in user_input.lower():
-                if "Store_Info" not in result or not result["Store_Info"]:
-                    response = "No store matched your request. Please try again."
-                else:
-                    store_info = result["Store_Info"]
-                    retailer_id = store_info["Retailer_ID"]
-                    visit_id = str(uuid.uuid4())
+            # ----- Visit Store -----
+            if "visit" in user_input.lower():
+                store = result.get("Store_Info")
 
-                    pitch = result.get("Pitch", "No pitch available.")
-                    stock = result.get("Last_Visit_Stock", [])
-                    recs = result.get("Product_Recommendations", [])
+                if not store:
+                    # No match → Show plan again
+                    route = normalize_route(result.get("Beat_Route_Plan"))
+                    hint = "⚠️ Could not match the store. Try: `visit <store name/id/sequence>`"
+                    plan = "\n".join([f"{r['Visit_Sequence']}. {r['Name']} (ID: {r['Retailer_ID']})" for r in route])
+                    st.session_state.messages.append({"role": "assistant", "content": f"{hint}\n\n### Route\n{plan}"})
+                    st.rerun()
 
-                    rec_text = "\n".join([f"- {r['Product_Name']}" for r in recs]) if recs else "None"
-                    stock_text = "\n".join([f"- {s['Product_Name']}: {s['Available_Stock']}" for s in stock]) if stock else "No stock data"
+                stock = ensure_list(result.get("Last_Visit_Stock"))
+                recs = ensure_list(result.get("Product_Recommendations"))
+                pitch = result.get("Pitch", "")
 
-                    response = f"""
-                    ### Store: {store_info.get("Name", "Unknown")}
+                stock_text = "\n".join([f"- {s['Product_Name']}: {s['Available_Stock']}" for s in stock])
+                rec_text = "\n".join([f"- {r['Product_Name']}" for r in recs])
 
-                    **Last Visit Stock:**  
-                    {stock_text}
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": f"""### 🏬 {store['Name']} (ID: {store['Retailer_ID']})
 
-                    **Recommended Products:**  
-                    {rec_text}
+**Last Visit Stock:**  
+{stock_text or 'No stock data'}
 
-                    **Suggested Pitch:**  
-                    {pitch}
-                    """
+**Recommended Products:**  
+{rec_text or 'No recommendations'}
 
-                    # Order logging form
-                    with st.form(key=f"order_form_{visit_id}"):
-                        st.subheader("Log Order")
+**Suggested Pitch:**  
+{pitch or 'No pitch available.'}
+"""
+                })
 
-                        if recs:
-                            product_options = {rec["Product_Name"]: rec["Product_ID"] for rec in recs}
-                            selected_product_name = st.selectbox("Select Product", list(product_options.keys()))
-                            selected_product_id = product_options[selected_product_name]
-
-                            price = get_product_price(selected_product_id)
-                            st.markdown(f"**Price:** {price}")
-
-                            qty = st.number_input("Enter Quantity", min_value=1, step=1)
-                            feedback = st.text_area("Retailer Feedback (optional)")
-
-                            if st.form_submit_button("Log Order"):
-                                order_products = [{
-                                    "Product_ID": selected_product_id,
-                                    "Quantity": qty,
-                                    "Available_Stock": 0,
-                                    "Price": price
-                                }]
-
-                                new_state = {
-                                    **result,
-                                    "sales_rep_id": st.session_state.sales_rep_id,
-                                    "Weekday": st.session_state.weekday,
-                                    "order_products": order_products,
-                                    "feedback": feedback
-                                }
-
-                                result = executable_graph.invoke(new_state, config=config)
-                                st.session_state.graph_state = result
-
-                                st.success(f"✅ Order for {selected_product_name} logged successfully!")
-                                st.session_state.messages.append({
-                                    "role": "assistant",
-                                    "content": f"Order logged for {selected_product_name}. Please select the next store from your beat plan."
-                                })
-                                st.rerun()
-
-            # --- Append bot response ---
-            if response:
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                # ✅ Rerun here to show summary first, then UI below
+                st.session_state.show_cart_ui = True
                 st.rerun()
 
 
-# Agentic Flow Tab
+        # -----------------------
+        # ✅ SECOND-PHASE UI RENDERING (Add-To-Cart)
+        # -----------------------
+        result = st.session_state.graph_state
+        store = result.get("Store_Info")
+
+        if st.session_state.show_cart_ui and store:
+            
+
+            st.write("---")
+            st.subheader("🛒 Add to Cart")
+
+
+            recs = ensure_list(result.get("Product_Recommendations"))
+            product_options = {r["Product_Name"]: r["Product_ID"] for r in recs}
+
+            if product_options:
+                selected_name = st.selectbox("Product", list(product_options.keys()))
+                qty = st.number_input("Quantity", min_value=1, step=1)
+                available_stock = st.number_input("Available Stock", min_value=0, step=1, value=0)
+                # feedback = st.text_area("Retailer Feedback")
+
+                if st.button("Add to Order"):
+                    pid = product_options[selected_name]
+                    price = get_product_price(pid)
+                    st.session_state.cart.append({
+                        "Product_ID": pid,
+                        "Product_Name": selected_name,
+                        "Quantity": int(qty),
+                        "Price": price,
+                        "Available_Stock": int(available_stock)
+                    })
+                    st.success(f"✅ Added {selected_name}")
+
+            if st.session_state.cart:
+                st.subheader("🧾 Current Order")
+                for item in st.session_state.cart:
+                    st.write(f"- {item['Product_Name']} x {item['Quantity']} @ {item['Price']}")
+
+                feedback = st.text_area("Retailer Feedback")
+
+                if st.button("Submit Order ✅"):
+                    visit_id = str(uuid.uuid4())
+                    order_state = {
+                        **result,
+                        "visit_id": visit_id,
+                        "retailer_id": store["Retailer_ID"],
+                        "order_products": st.session_state.cart,
+                        "feedback": feedback
+                    }
+                    result2 = executable_graph.invoke(order_state, config=config)
+                    st.session_state.graph_state = result2
+                    st.session_state.cart = []
+                    st.session_state.show_cart_ui = False
+                    st.success("Order submitted! ✅ Continue with `visit next` or `plan`.")
+                    st.rerun()
+
+
+# =====================================
+# TAB 2 — GRAPH VISUALIZATION
+# =====================================
+# ---------- tab 2 ----------
 with tab2:
     st.title("Agentic Flow")
-
-    # Mermaid render
     png_bytes = executable_graph.get_graph().draw_mermaid_png()
     image = Image.open(BytesIO(png_bytes))
     st.image(image, caption="Agentic Flow Diagram")
 
-
-    # Download PNG
     if st.button("Export Graph PNG"):
-        png_bytes = executable_graph.get_graph().draw_mermaid_png()
         b64 = base64.b64encode(png_bytes).decode()
         href = f'<a href="data:image/png;base64,{b64}" download="sales_graph.png">Download PNG</a>'
         st.markdown(href, unsafe_allow_html=True)
