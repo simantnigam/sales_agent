@@ -14,6 +14,17 @@ class OrderLoggingAgent:
 
     def __init__(self,db_path: str = "sales_agent_co_pilot.db"):
         self.db_path = db_path
+
+    def _resolve_retailer_id(self, state: Dict[str, Any]) -> str:
+        # Prefer explicit Retailer_ID from UI; fallback to Store_Info or Retailer_ID in state
+        rid = state.get("Retailer_ID")
+        if rid:
+            return rid
+        store = state.get("Store_Info") or {}
+        rid = store.get("Retailer_ID")
+        if rid:
+            return rid
+        return state.get("Retailer_ID")
         
 
     def log_order(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -34,20 +45,23 @@ class OrderLoggingAgent:
         products = state.get("order_products", [])
         feedback = state.get("feedback", "")
         visit_id = state.get("visit_id", str(uuid.uuid4()))
-        retailer_id = state.get("Retailer_ID")
+        # retailer_id = state.get("Retailer_ID")
+        retailer_id = self._resolve_retailer_id(state)
         agent_id = state.get("sales_rep_id")
         invoice_id = f"INV_{visit_id}"
+        date_today = datetime.now().strftime("%Y-%m-%d")
 
-        if not products:
-            state["order_log"] = "No products to log."
+        if not retailer_id:
+            state["order_log"] = "Retailer_ID missing; visit not logged."
             return state
+
+        # if not products:
+        #     state["order_log"] = "No products to log."
+        #     return state
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            date_today = datetime.now().strftime("%Y-%m-%d")
-
-            
 
             # Insert into visits
             cursor.execute("""
@@ -57,49 +71,57 @@ class OrderLoggingAgent:
                 visit_id,
                 retailer_id,
                 date_today,
-                ", ".join([p["Product_ID"] for p in products]),
+                ", ".join([p.get("Product_ID", "") for p in products]) if products else "N.A",
                 feedback if feedback else "",
                 1 if products else 0,
                 agent_id
             ))
 
             
+            if products:
+                # Insert into visit_stock + sales
+                for prod in products:
+                    product_id = prod["Product_ID"]
+                    qty = prod["Quantity"]
+                    stock = prod["Available_Stock"]
+                    price = prod.get("Price", 0.0)
+                    total_amount = qty * price
 
-            # Insert into visit_stock + sales
-            for prod in products:
-                product_id = prod["Product_ID"]
-                qty = prod["Quantity"]
-                stock = prod["Available_Stock"]
-                price = prod.get("Price", 0.0)
-                total_amount = qty * price
+                    # visit_stock
+                    cursor.execute("""
+                        INSERT INTO visit_stock (Visit_ID, Product_ID, Retailer_ID, Available_Stock)
+                        VALUES (?, ?, ?, ?)
+                    """, (visit_id, product_id, retailer_id, stock))
 
-                # visit_stock
-                cursor.execute("""
-                    INSERT INTO visit_stock (Visit_ID, Product_ID, Retailer_ID, Available_Stock)
-                    VALUES (?, ?, ?, ?)
-                """, (visit_id, product_id, retailer_id, stock))
-
-                # sales
-                cursor.execute("""
-                    INSERT INTO sales (Invoice_ID, Visit_ID, Retailer_ID, Product_ID, Quantity, Date, Total_Amount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    invoice_id,
-                    visit_id,
-                    retailer_id,
-                    product_id,
-                    qty,
-                    date_today,
-                    total_amount
-                ))
+                    # sales
+                    cursor.execute("""
+                        INSERT INTO sales (Invoice_ID, Visit_ID, Retailer_ID, Product_ID, Quantity, Date, Total_Amount)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        invoice_id,
+                        visit_id,
+                        retailer_id,
+                        product_id,
+                        qty,
+                        date_today,
+                        total_amount
+                    ))
 
             conn.commit()
-            log_msg = f"Order logged for Visit ID: {visit_id}, Invoice ID: {invoice_id}"
-            state["order_log"] = log_msg
+
+
+            # log_msg = f"Order logged for Visit ID: {visit_id}, Invoice ID: {invoice_id}"
+            # state["order_log"] = log_msg
             visited = state.get("visited_retailers", [])
             if retailer_id not in visited:
                 visited.append(retailer_id)
             state["visited_retailers"] = visited
+
+            state["order_log"] = (
+                f"Visit logged (Visit_ID={visit_id}). "
+                + ("Order captured." if products else "No order captured.")
+            )
+            
             return state
 
         except sqlite3.Error as e:

@@ -27,10 +27,11 @@ def fetch_beat_route_plan(inputs: Dict[str, Union[str, int]], db_path: str = "sa
             FROM beat_route_plan brp
             JOIN retailers r ON brp.Retailer_ID = r.Retailer_ID
             WHERE brp.Beat_ID = ?
+            and brp.Visit_Sequence < (SELECT max(Visit_Sequence) FROM beat_route_plan WHERE Beat_ID = ?)
             ORDER BY brp.Visit_Sequence ASC
         """
     
-    route_plan_df = pd.read_sql_query(query, conn, params=(beat_id,))
+    route_plan_df = pd.read_sql_query(query, conn, params=(beat_id,beat_id))
     
     conn.close()
 

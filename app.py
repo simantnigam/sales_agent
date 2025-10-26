@@ -134,10 +134,38 @@ with tab1:
                 st.rerun()
 
             # ----- Show Route -----
+            # if "plan" in user_input.lower():
+            #     route = normalize_route(result.get("Beat_Route_Plan"))
+            #     plan = "\n".join([f"{r['Visit_Sequence']}. {r['Name']} (ID: {r['Retailer_ID']})" for r in route])
+            #     st.session_state.messages.append({"role": "assistant", "content": f"### 📍 Route Plan\n{plan}"})
+            #     st.rerun()
             if "plan" in user_input.lower():
                 route = normalize_route(result.get("Beat_Route_Plan"))
-                plan = "\n".join([f"{r['Visit_Sequence']}. {r['Name']} (ID: {r['Retailer_ID']})" for r in route])
-                st.session_state.messages.append({"role": "assistant", "content": f"### 📍 Route Plan\n{plan}"})
+                # visited_retailers is expected to be a list of retailer IDs in the graph state
+                visited = set(map(str, result.get("visited_retailers", []) or []))
+
+                # If user asked for unvisited/remaining, filter out visited stores
+                show_only_unvisited = any(k in user_input.lower() for k in ("unvisited", "remaining", "pending", "not visited"))
+
+                lines = []
+                for r in route:
+                    rid = str(r.get("Retailer_ID", ""))
+                    seq = r.get("Visit_Sequence", "?")
+                    name = r.get("Name", "Unknown")
+                    if show_only_unvisited and rid in visited:
+                        continue
+                    suffix = " (visited)" if rid in visited else ""
+                    lines.append(f"{seq}. {name} (ID: {rid}){suffix}")
+
+                if not lines:
+                    if show_only_unvisited:
+                        msg = "✅ No unvisited stores remain on the route."
+                    else:
+                        msg = "No stores available in the route."
+                else:
+                    msg = "### 📍 Route Plan\n" + "\n".join(lines)
+
+                st.session_state.messages.append({"role": "assistant", "content": msg})
                 st.rerun()
 
             # ----- Visit Store -----
@@ -233,7 +261,23 @@ with tab1:
                     st.session_state.graph_state = result2
                     st.session_state.cart = []
                     st.session_state.show_cart_ui = False
-                    st.success("Order submitted! ✅ Continue with `visit next` or `plan`.")
+                    st.success("Order submitted! Continue with `visit next` or `plan`.")
+                    st.rerun()
+
+                if st.button("No Order to Submit"):
+                    visit_id = str(uuid.uuid4())
+                    st.session_state.cart = []
+                    order_state = {
+                        **result,
+                        "visit_id": visit_id,
+                        "retailer_id": store["Retailer_ID"],
+                        "order_products": st.session_state.cart,
+                        "feedback": feedback
+                    }
+                    result2 = executable_graph.invoke(order_state, config=config)
+                    st.session_state.graph_state = result2
+                    st.session_state.show_cart_ui = False
+                    st.info("No order submitted. You can continue with `visit next` or `plan`.")
                     st.rerun()
 
 

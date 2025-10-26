@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, List,Any
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
+from utils.get_day import get_current_day
 
 load_dotenv(override=True)
 
@@ -24,18 +25,22 @@ class DaySummaryAgent:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         # date_today = datetime.now().strftime("%Y-%m-%d")
+        current_day = get_current_day()
 
         # Total planned visits from beat plan
         cursor.execute("""
-            SELECT COUNT(*)
-            FROM beat_route_plan
-            WHERE Agent_ID = ? AND DATE(Date) = DATE(?)
-        """, (agent_id, date))
+            select count(*) - 1
+            FROM beat_route_plan a
+            join beats b
+            ON a.Beat_ID = b.Beat_ID
+            WHERE b.Assigned_Agent = ? 
+            AND b.Beat_day = ?
+        """, (agent_id, current_day))
         total_planned_visits = cursor.fetchone()[0]
 
         # Total actual visits
         cursor.execute("""
-            SELECT COUNT(*)
+            SELECT count(distinct Retailer_ID)
             FROM visits
             WHERE Agent_ID = ? AND DATE(Date) = DATE(?)
         """, (agent_id, date))

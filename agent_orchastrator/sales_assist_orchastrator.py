@@ -97,7 +97,8 @@ def build_agent_graph():
         msg = _msg(state)
         if "day summary" in msg:
             return "day_summary"
-        if state.get("order_products"):
+        # if state.get("order_products"):
+        if state.get("visit_id") is not None:
             return "log_order"
         return "__END__"#"get_route"
 
