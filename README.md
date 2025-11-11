@@ -35,7 +35,9 @@ sales-agent/
 
 ##  Agent Flow Diagram
 
-![Architecture](sales_agent_graph.png)
+![Architecture Old](sales_agent_graph.png)
+
+![Architecture New](sales_graph.png)
 
 ---
 
